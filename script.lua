@@ -1,4 +1,5 @@
 local Players = game:GetService("Players")
+local CollectionService = game:GetService("CollectionService")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
@@ -24,6 +25,7 @@ local chestCooldowns = {}
 local activeTween
 local tracked = {}
 local spawnedFruitButtons = {}
+local spawnedFruitEntries = {}
 local playStarted = os.clock()
 local state = {
 	findChest = false,
@@ -207,7 +209,33 @@ local function getChests()
 	return chests
 end
 
+local function isExcludedObject(object)
+	local name = object.Name:lower()
+	return name:find("dealer", 1, true)
+		or name:find("gacha", 1, true)
+		or name:find("fruit dealer", 1, true)
+end
+
+local function isFruitObject(object)
+	if not (object:IsA("Model") or object:IsA("Tool")) or isExcludedObject(object) then
+		return false
+	end
+
+	local name = object.Name:lower()
+	local itemType = tostring(object:GetAttribute("ItemType")):lower()
+	return object:GetAttribute("Fruit") == true
+		or object:GetAttribute("IsFruit") == true
+		or object:GetAttribute("FruitName") ~= nil
+		or CollectionService:HasTag(object, "Fruit")
+		or name:find("fruit", 1, true) ~= nil
+		or name:find("berry", 1, true) ~= nil
+		or itemType == "fruit"
+end
+
 local function getEspCategory(object)
+	if isExcludedObject(object) then
+		return nil
+	end
 	if object:IsA("BasePart") and object.Name:lower():find("chest", 1, true) then
 		return "chestEsp"
 	end
@@ -218,10 +246,7 @@ local function getEspCategory(object)
 	if name:find("chest", 1, true) then
 		return "chestEsp"
 	end
-	if name:find("dealer", 1, true) then
-		return nil
-	end
-	if name:find("fruit", 1, true) or name:find("berry", 1, true) then
+	if isFruitObject(object) then
 		return "fruitEsp"
 	end
 	return nil
@@ -266,9 +291,7 @@ local function removeEsp(object)
 end
 
 local function isSpawnedFruit(object)
-	local name = object.Name:lower()
-	return (object:IsA("Model") or object:IsA("Tool"))
-		and (name:find("fruit", 1, true) or object:GetAttribute("Fruit") == true)
+	return isFruitObject(object)
 end
 
 local function getFruitPosition(object)
@@ -281,9 +304,9 @@ local function refreshFruitList()
 		button:Destroy()
 	end
 	table.clear(spawnedFruitButtons)
-	local root = getRoot(player.Character)
+	table.clear(spawnedFruitEntries)
 	local fruits = {}
-	for _, object in ipairs(workspace:GetChildren()) do
+	for _, object in ipairs(workspace:GetDescendants()) do
 		if isSpawnedFruit(object) then
 			table.insert(fruits, object)
 		end
@@ -299,9 +322,7 @@ local function refreshFruitList()
 		button.Font = Enum.Font.Gotham
 		button.TextColor3 = COLORS.text
 		button.TextSize = 12
-		local fruitPosition = getFruitPosition(fruit)
-		local distance = root and fruitPosition and (root.Position - fruitPosition).Magnitude or 0
-		button.Text = string.format("  %s  (%.0f studs)", fruit.Name, distance)
+		button.Text = "  " .. fruit.Name
 		button.TextXAlignment = Enum.TextXAlignment.Left
 		button.Parent = fruitList
 		button.Activated:Connect(function()
@@ -312,6 +333,7 @@ local function refreshFruitList()
 			end
 		end)
 		table.insert(spawnedFruitButtons, button)
+		table.insert(spawnedFruitEntries, { fruit = fruit, button = button })
 	end
 	fruitList.CanvasSize = UDim2.fromOffset(0, listLayout.AbsoluteContentSize.Y + 4)
 end
@@ -345,6 +367,17 @@ workspace.DescendantAdded:Connect(addEsp)
 workspace.DescendantRemoving:Connect(removeEsp)
 workspace.ChildAdded:Connect(refreshFruitList)
 workspace.ChildRemoved:Connect(refreshFruitList)
+workspace.DescendantAdded:Connect(function(object)
+	if isSpawnedFruit(object) then
+		refreshFruitList()
+	end
+end)
+workspace.DescendantRemoving:Connect(function(object)
+	if isSpawnedFruit(object) then
+		refreshFruitList()
+	end
+end)
+refreshFruitList()
 
 task.defer(function()
 	TweenService:Create(panel, PANEL_TWEEN, {
@@ -371,13 +404,22 @@ RunService.RenderStepped:Connect(function()
 		listTween:Play()
 	end
 	for object, entry in pairs(tracked) do
-		if not object:IsDescendantOf(workspace) or not entry.root.Parent then
+		entry.root = getObjectRoot(object)
+		if not object:IsDescendantOf(workspace) or not entry.root or not entry.root.Parent then
 			removeEsp(object)
 		else
 			entry.gui.Enabled = state[entry.category]
 			local root = getRoot(player.Character)
 			local distance = root and (root.Position - entry.root.Position).Magnitude or 0
 			entry.label.Text = string.format("%s  %.0f studs", object.Name, distance)
+		end
+	end
+	local root = getRoot(player.Character)
+	for _, entry in ipairs(spawnedFruitEntries) do
+		if entry.fruit.Parent then
+			local fruitPosition = getFruitPosition(entry.fruit)
+			local distance = root and fruitPosition and (root.Position - fruitPosition).Magnitude or 0
+			entry.button.Text = string.format("  %s  (%.0f studs)", entry.fruit.Name, distance)
 		end
 	end
 end)
