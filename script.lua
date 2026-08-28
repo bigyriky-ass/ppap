@@ -3,6 +3,7 @@ local CollectionService = game:GetService("CollectionService")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
+local VirtualUser = game:GetService("VirtualUser")
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -23,6 +24,7 @@ local SPEED = 300
 local CHEST_COOLDOWN = 20 * 60
 local chestCooldowns = {}
 local activeTween
+local waterPart
 local tracked = {}
 local spawnedFruitButtons = {}
 local spawnedFruitEntries = {}
@@ -31,7 +33,9 @@ local state = {
 	findChest = false,
 	fruitEsp = false,
 	chestEsp = false,
-	spawnedFruits = false
+	spawnedFruits = false,
+	walkOnWater = false,
+	antiAfk = false
 }
 
 local FAST_TWEEN = TweenInfo.new(0.16, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
@@ -45,8 +49,8 @@ screenGui.Parent = playerGui
 
 local panel = Instance.new("Frame")
 panel.Name = "MainPanel"
-panel.Size = UDim2.fromOffset(280, 390)
-panel.Position = UDim2.new(0, -300, 0.5, -195)
+panel.Size = UDim2.fromOffset(280, 500)
+panel.Position = UDim2.new(0, -300, 0.5, -250)
 panel.BackgroundColor3 = COLORS.background
 panel.BackgroundTransparency = 1
 panel.BorderSizePixel = 0
@@ -161,11 +165,13 @@ makeToggle("findChest", "Find Chest", COLORS.accent)
 makeToggle("fruitEsp", "Fruit ESP", COLORS.fruit)
 makeToggle("chestEsp", "Chest ESP", COLORS.chest)
 makeToggle("spawnedFruits", "Spawned Fruits", COLORS.spawned)
+makeToggle("walkOnWater", "Walk On Water", COLORS.accent)
+makeToggle("antiAfk", "Anti AFK", COLORS.accent)
 
 local fruitList = Instance.new("ScrollingFrame")
 fruitList.Name = "SpawnedFruitList"
 fruitList.Size = UDim2.new(1, -24, 0, 90)
-fruitList.Position = UDim2.fromOffset(12, 292)
+fruitList.Position = UDim2.fromOffset(12, 382)
 fruitList.BackgroundColor3 = COLORS.panel
 fruitList.BorderSizePixel = 0
 fruitList.ScrollBarThickness = 4
@@ -381,14 +387,41 @@ refreshFruitList()
 
 task.defer(function()
 	TweenService:Create(panel, PANEL_TWEEN, {
-		Position = UDim2.new(0, 24, 0.5, -195),
+		Position = UDim2.new(0, 24, 0.5, -250),
 		BackgroundTransparency = 0
 	}):Play()
+end)
+
+player.Idled:Connect(function()
+	if state.antiAfk then
+		VirtualUser:CaptureController()
+		VirtualUser:ClickButton2(Vector2.new())
+	end
 end)
 
 local lastFruitListState = state.spawnedFruits
 RunService.RenderStepped:Connect(function()
 	playTime.Text = formatTime(os.clock() - playStarted)
+	if state.walkOnWater then
+		local root = getRoot(player.Character)
+		if root then
+			if not waterPart then
+				waterPart = Instance.new("Part")
+				waterPart.Name = "GeneralHubWaterWalk"
+				waterPart.Size = Vector3.new(500, 0.1, 500)
+				waterPart.Transparency = 1
+				waterPart.Anchored = true
+				waterPart.CanCollide = true
+				waterPart.CanTouch = false
+				waterPart.CanQuery = false
+				waterPart.Parent = workspace
+			end
+			waterPart.Position = Vector3.new(root.Position.X, 0.5, root.Position.Z)
+		end
+	elseif waterPart then
+		waterPart:Destroy()
+		waterPart = nil
+	end
 	if state.spawnedFruits ~= lastFruitListState then
 		lastFruitListState = state.spawnedFruits
 		if state.spawnedFruits then
