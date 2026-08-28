@@ -24,6 +24,7 @@ local SPEED = 300
 local CHEST_COOLDOWN = 20 * 60
 local chestCooldowns = {}
 local activeTween
+local collectingChest
 local waterPart
 local tracked = {}
 local spawnedFruitButtons = {}
@@ -77,7 +78,7 @@ local headerCorner = panelCorner:Clone()
 headerCorner.Parent = header
 
 local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, -28, 0, 38)
+title.Size = UDim2.new(1, -70, 0, 38)
 title.Position = UDim2.fromOffset(14, 10)
 title.BackgroundTransparency = 1
 title.Text = "General Hub"
@@ -86,6 +87,39 @@ title.TextSize = 25
 title.Font = Enum.Font.GothamBold
 title.TextXAlignment = Enum.TextXAlignment.Left
 title.Parent = header
+
+local closeButton = Instance.new("TextButton")
+closeButton.Name = "CloseButton"
+closeButton.Size = UDim2.fromOffset(32, 32)
+closeButton.Position = UDim2.new(1, -44, 0, 13)
+closeButton.BackgroundColor3 = COLORS.panelLight
+closeButton.AutoButtonColor = false
+closeButton.BorderSizePixel = 0
+closeButton.Font = Enum.Font.GothamBold
+closeButton.Text = "X"
+closeButton.TextColor3 = COLORS.text
+closeButton.TextSize = 16
+closeButton.Parent = header
+
+local closeCorner = Instance.new("UICorner")
+closeCorner.CornerRadius = UDim.new(0, 6)
+closeCorner.Parent = closeButton
+
+closeButton.Activated:Connect(function()
+	if activeTween then
+		activeTween:Cancel()
+		activeTween = nil
+	end
+	if waterPart then
+		waterPart:Destroy()
+		waterPart = nil
+	end
+	for object, entry in pairs(tracked) do
+		entry.gui:Destroy()
+		tracked[object] = nil
+	end
+	screenGui:Destroy()
+end)
 
 local playTime = Instance.new("TextLabel")
 playTime.Size = UDim2.new(1, -28, 0, 22)
@@ -213,6 +247,15 @@ local function getChests()
 		end
 	end
 	return chests
+end
+
+local function collectChest(chest)
+	local prompt = chest:FindFirstChildWhichIsA("ProximityPrompt", true)
+	if prompt and prompt.Enabled then
+		prompt:InputHoldBegin()
+		task.wait(prompt.HoldDuration)
+		prompt:InputHoldEnd()
+	end
 end
 
 local function isExcludedObject(object)
@@ -463,6 +506,7 @@ RunService.Heartbeat:Connect(function()
 			activeTween:Cancel()
 			activeTween = nil
 		end
+		collectingChest = nil
 		local root = getRoot(player.Character)
 		if root then
 			root.Anchored = false
@@ -471,7 +515,7 @@ RunService.Heartbeat:Connect(function()
 	end
 
 	local root = getRoot(player.Character)
-	if not root or activeTween then
+	if not root or activeTween or collectingChest then
 		return
 	end
 	local nearest
@@ -491,7 +535,14 @@ RunService.Heartbeat:Connect(function()
 		activeTween:Play()
 		activeTween.Completed:Connect(function(result)
 			if result == Enum.PlaybackState.Completed and state.findChest then
-				chestCooldowns[nearest] = os.clock() + CHEST_COOLDOWN
+				collectingChest = nearest
+				task.spawn(function()
+					collectChest(nearest)
+					if state.findChest and nearest.Parent then
+						chestCooldowns[nearest] = os.clock() + CHEST_COOLDOWN
+					end
+					collectingChest = nil
+				end)
 			end
 			activeTween = nil
 		end)
