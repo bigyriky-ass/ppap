@@ -29,7 +29,7 @@ local waterPart
 local tracked = {}
 local spawnedFruitButtons = {}
 local spawnedFruitEntries = {}
-local playStarted = os.clock()
+local playStarted = tick()
 local state = {
 	findChest = false,
 	fruitEsp = false,
@@ -222,7 +222,7 @@ listLayout.Parent = fruitList
 
 local function formatTime(seconds)
 	local total = math.floor(seconds)
-	return string.format("Play time  %02d:%02d:%02d", math.floor(total / 3600), math.floor(total / 60) % 60, total % 60)
+	return string.format("In game  %02d:%02d:%02d", math.floor(total / 3600), math.floor(total / 60) % 60, total % 60)
 end
 
 local function getRoot(character)
@@ -348,6 +348,74 @@ local function getFruitPosition(object)
 	return root and root.Position
 end
 
+local FRUIT_PRICE_MAP = {
+	"Rocket Fruit" = 5000,
+	"Spin Fruit" = 7500,
+	"Blade Fruit" = 30000,
+	"Spring Fruit" = 60000,
+	"Bomb Fruit" = 100000,
+	"Smoke Fruit" = 150000,
+	"Spike Fruit" = 180000,
+	"Flame Fruit" = 250000,
+	"Ice Fruit" = 350000,
+	"Sand Fruit" = 420000,
+	"Dark Fruit" = 500000,
+	"Eagle Fruit" = 550000,
+	"Diamond Fruit" = 600000,
+	"Light Fruit" = 650000,
+	"Rubber Fruit" = 750000,
+	"Ghost Fruit" = 940000,
+	"Magma Fruit" = 960000,
+	"Quake Fruit" = 1000000,
+	"Buddha Fruit" = 1200000,
+	"Love Fruit" = 1300000,
+	"Creation Fruit" = 1400000,
+	"String Fruit" = 1500000,
+	"Sound Fruit" = 1700000,
+	"Phoenix Fruit" = 1800000,
+	"Portal Fruit" = 1900000,
+	"Lightning Fruit" = 2100000,
+	"Pain Fruit" = 2300000,
+	"Blizzard Fruit" = 2400000,
+	"Gravity Fruit" = 2500000,
+	"Mammoth Fruit" = 2700000,
+	"T-Rex Fruit" = 2700000,
+	"Dough Fruit" = 2800000,
+	"Shadow Fruit" = 2900000,
+	"Venom Fruit" = 3000000,
+	"Gas Fruit" = 3200000,
+	"Spirit Fruit" = 3400000,
+	"Tiger Fruit" = 5000000,
+	"Yeti Fruit" = 5000000,
+	"Kitsune Fruit" = 8000000,
+	"Control Fruit" = 9000000,
+	"Dragon Fruit" = 15000000,
+}
+
+local function getFruitPrice(object)
+	if not object then
+		return 0
+	end
+
+	local value = object:GetAttribute("FruitValue")
+		or object:GetAttribute("Value")
+		or object:GetAttribute("Price")
+	if value ~= nil then
+		local numericValue = tonumber(value)
+		if numericValue then
+			return numericValue
+		end
+	end
+
+	local normalized = object.Name:lower():gsub("%s+", "")
+	local mappedValue = FRUIT_PRICE_MAP[normalized]
+	if mappedValue then
+		return mappedValue
+	end
+
+	return 0
+end
+
 local function refreshFruitList()
 	for _, button in ipairs(spawnedFruitButtons) do
 		button:Destroy()
@@ -361,7 +429,12 @@ local function refreshFruitList()
 		end
 	end
 	table.sort(fruits, function(left, right)
-		return left.Name:lower() < right.Name:lower()
+		local leftPrice = getFruitPrice(left)
+		local rightPrice = getFruitPrice(right)
+		if leftPrice == rightPrice then
+			return left.Name:lower() < right.Name:lower()
+		end
+		return leftPrice > rightPrice
 	end)
 	for _, fruit in ipairs(fruits) do
 		local button = Instance.new("TextButton")
@@ -371,7 +444,8 @@ local function refreshFruitList()
 		button.Font = Enum.Font.Gotham
 		button.TextColor3 = COLORS.text
 		button.TextSize = 12
-		button.Text = "  " .. fruit.Name
+		local fruitPrice = getFruitPrice(fruit)
+		button.Text = fruitPrice > 0 and string.format("  %s  (%d)", fruit.Name, fruitPrice) or "  " .. fruit.Name
 		button.TextXAlignment = Enum.TextXAlignment.Left
 		button.Parent = fruitList
 		button.Activated:Connect(function()
@@ -444,7 +518,7 @@ end)
 
 local lastFruitListState = state.spawnedFruits
 RunService.RenderStepped:Connect(function()
-	playTime.Text = formatTime(os.clock() - playStarted)
+	playTime.Text = formatTime(tick() - playStarted)
 	if state.walkOnWater then
 		local root = getRoot(player.Character)
 		if root then
